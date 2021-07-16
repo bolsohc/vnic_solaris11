@@ -1,0 +1,10 @@
+---
+# vars file for public ip
+
+
+node_ip_public:
+   
+node_ip_public_probe_0:
+   
+node_ip_public_probe_2:
+

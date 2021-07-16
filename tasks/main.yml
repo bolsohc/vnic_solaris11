@@ -1,0 +1,99 @@
+---
+# tasks file for add public ip
+
+- set_fact:
+    node_name: "{{ ansible_hostname }}"    
+  tags: deploy
+  
+- set_fact:
+    nic0: "{{ ansible_interfaces | select('match', 'net[0,1,2,3,5,6,7]+') | sort | list | first }}"
+  tags: deploy
+  
+- set_fact:
+    nic2:  "{{ ansible_interfaces | select('match', 'net[0,1,2,3,5,6,7]+') | sort | list | last }}"
+  tags: deploy
+    
+- name: create vnic   
+  dladm_vnic:
+    name: "{{ item.name }}"
+    link: "{{ item.link }}"
+  
+  with_items:
+    - { name: 'vnic0', link: "{{ nic0 }}" }
+    - { name: 'vnic2', link: "{{ nic2 }}" }
+  tags: deploy  
+ 
+- name: create-ip vnic0
+  shell: ipadm create-ip vnic0   
+  tags: deploy
+
+- name: create-ip vnic2
+  shell: ipadm  create-ip vnic2
+  tags: deploy
+  
+- name: create ipmp group
+  shell: ipadm create-ipmp ipmp1
+  tags: deploy
+  
+- name: add vnic to ipmp group
+  shell: ipadm add-ipmp -i vnic0 -i vnic2 ipmp1
+  tags: deploy
+
+- name: set standby vnic
+  shell: ipadm set-ifprop -p standby=on -m ip vnic2
+  tags: deploy
+  
+- name: add public IP to IPMP group
+  ipadm_addr:
+    addr: "{{ node_ip_public[node_name] }}"
+    addrobj: ipmp1/v4
+    state: present 
+  tags: deploy
+
+- name: add probe IP for vnic 1/2
+  ipadm_addr:
+    addr: "{{ node_ip_public_probe_0[node_name] }}"
+    addrobj: vnic0/v4
+    state: present
+  tags: deploy
+  
+- name: add probe IP for vnic 2/2
+  ipadm_addr:
+    addr: "{{ node_ip_public_probe_2[node_name] }}"
+    addrobj: vnic2/v4
+    state: present
+  tags: deploy    
+    
+- name: remove public IP from IPMP group   
+  ipadm_addr:
+    addrobj: ipmp1/v4
+    state: absent 
+  tags: rollback
+
+- name: remove public IP from vnic 1/2
+  ipadm_addr:
+    addrobj: vnic0/v4
+    state: absent
+  tags: rollback
+
+- name: remove public IP from vnic 2/2
+  ipadm_addr:
+    addrobj: vnic2/v4
+    state: absent
+  tags: rollback  
+ 
+- name: remove interfaces from ipmp1
+  shell: ipadm remove-ipmp -i vnic0 -i vnic2 ipmp1
+  tags: rollback
+
+- name: remove IPMP
+  shell: ipadm delete-ipmp ipmp1
+  tags: rollback
+
+- name: remove vnic0
+  shell: ipadm delete-ip vnic0
+  tags: rollback
+
+- name: remove vnic2
+  shell: ipadm delete-ip vnic2
+  tags: rollback 
